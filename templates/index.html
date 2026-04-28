@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SmartDoG</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #121212; color: #fff; min-height: 100vh; padding: 16px; }
+        .container { max-width: 480px; margin: 0 auto; }
+        h1 { text-align: center; font-size: 26px; margin-bottom: 24px; color: #4f8ff7; }
+        .section-title { font-size: 18px; margin: 20px 0 10px 0; color: #aaa; border-bottom: 1px solid #333; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;}
+        .add-btn { background: none; border: 1px solid #4f8ff7; color: #4f8ff7; padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; }
+        .template-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .template-card { background-color: #1e1e1e; padding: 16px; border-radius: 12px; display: flex; align-items: center; border: 1px solid #333; cursor: pointer; transition: 0.2s; }
+        .template-card:active { background-color: #333; }
+        .icon { font-size: 28px; margin-right: 16px; }
+        .t-name { font-size: 16px; font-weight: 500; text-transform: capitalize; }
+        .empty { text-align: center; color: #666; padding: 20px; font-style: italic; }
+        .card { background-color: #1e1e1e; padding: 20px; border-radius: 16px; border: 1px solid #333; }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; margin-bottom: 6px; color: #aaa; font-size: 14px; text-transform: capitalize; }
+        .field input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #444; background-color: #2d2d2d; color: white; font-size: 16px; }
+        .btn { width: 100%; padding: 16px; border-radius: 10px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .btn-green { background-color: #10b981; color: white; margin-top: 20px; }
+        .btn-green:disabled { background-color: #555; color: #888; }
+        .back-btn { background: none; border: none; color: #4f8ff7; font-size: 16px; cursor: pointer; margin-bottom: 20px; font-weight: bold; display: block; }
+        .msg { text-align: center; margin-top: 12px; font-size: 14px; min-height: 20px; padding: 10px; border-radius: 8px; word-wrap: break-word;}
+        .err { color: #ff4c4c; background: #2d1a1a; } .ok { color: #10b981; background: #1a2d1a; } .load { color: #fff; }
+        #form-view { display: none; }
+        #upload-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 99; justify-content: center; align-items: center; }
+        .modal-box { background: #1e1e1e; padding: 24px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #333; }
+        .modal-box input { width: 100%; margin: 10px 0; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #2d2d2d; color: white;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>SmartDoG</h1>
+    
+    <div id="home-view">
+        <div class="section-title">
+            <span>Word Documents</span>
+            <button class="add-btn" onclick="showUpload('docx')">+ Add</button>
+        </div>
+        <div id="docx-list" class="template-list"><div class="empty">Loading...</div></div>
+
+        <div class="section-title">
+            <span>Excel Spreadsheets</span>
+            <button class="add-btn" onclick="showUpload('xlsx')">+ Add</button>
+        </div>
+        <div id="xlsx-list" class="template-list"><div class="empty">Loading...</div></div>
+    </div>
+
+    <div id="form-view" class="card">
+        <button class="back-btn" onclick="goHome()">← Back to Templates</button>
+        <div id="fields"></div>
+        <button class="btn-green" id="gen-btn" onclick="generate()">Generate & Download</button>
+        <div id="msg2" class="msg"></div>
+    </div>
+</div>
+
+<div id="upload-modal">
+    <div class="modal-box">
+        <h3 style="margin-bottom:10px">Upload New Template</h3>
+        <input type="file" id="new-file">
+        <button class="btn" style="background:#4f8ff7; color:white" onclick="uploadFile()">Upload</button>
+        <button class="btn" style="background:#333; color:white; margin-top:10px" onclick="closeUpload()">Cancel</button>
+        <div id="msg-upload" class="msg"></div>
+    </div>
+</div>
+
+<script>
+    let selectedTemplate = "";
+    let selectedFormat = "";
+
+    async function loadTemplates() {
+        const res = await fetch('/api/templates');
+        const data = await res.json();
+        
+        document.getElementById('docx-list').innerHTML = data.docx.length ? data.docx.map(f => `
+            <div class="template-card" onclick="selectTemplate('${f}', 'docx')">
+                <div class="icon">📄</div>
+                <div class="t-name">${f.replace('.docx', '')}</div>
+            </div>`).join('') : '<div class="empty">No Word templates yet</div>';
+
+        document.getElementById('xlsx-list').innerHTML = data.xlsx.length ? data.xlsx.map(f => `
+            <div class="template-card" onclick="selectTemplate('${f}', 'xlsx')">
+                <div class="icon">📊</div>
+                <div class="t-name">${f.replace('.xlsx', '')}</div>
+            </div>`).join('') : '<div class="empty">No Excel templates yet</div>';
+    }
+
+    async function selectTemplate(name, format) {
+        selectedTemplate = name;
+        selectedFormat = format;
+        document.getElementById('home-view').style.display = 'none';
+        document.getElementById('form-view').style.display = 'block';
+        document.getElementById('msg2').className = 'msg';
+        document.getElementById('msg2').innerText = '';
+        document.getElementById('fields').innerHTML = '<div class="empty" style="color:white">Scanning...</div>';
+
+        const fd = new FormData();
+        fd.append('template_name', name);
+        fd.append('format', format);
+        fd.append('action', 'extract');
+
+        const res = await fetch('/api/process', {method: 'POST', body: fd});
+        const data = await res.json();
+
+        if (data.status === 'error') {
+            document.getElementById('fields').innerHTML = `<div class="msg err">${data.message}</div>`;
+            return;
+        }
+        if (data.variables.length === 0) {
+            document.getElementById('fields').innerHTML = '<div class="msg err">No {{variables}} found.</div>';
+            return;
+        }
+
+        document.getElementById('fields').innerHTML = '';
+        data.variables.forEach(v => {
+            document.getElementById('fields').innerHTML += `
+                <div class="field">
+                    <label>${v.trim().replace(/_/g, ' ')}</label>
+                    <input type="text" name="${v.trim()}">
+                </div>`;
+        });
+    }
+
+    async function generate() {
+        const btn = document.getElementById('gen-btn');
+        const msgBox = document.getElementById('msg2');
+        btn.disabled = true; 
+        btn.innerText = 'Working...';
+        msgBox.className = 'msg';
+        msgBox.innerText = 'Generating...';
+
+        const fd = new FormData();
+        fd.append('template_name', selectedTemplate);
+        fd.append('format', selectedFormat);
+        fd.append('action', 'generate');
+        
+        document.querySelectorAll('.field input').forEach(i => fd.append(i.name, i.value));
+
+        try {
+            const res = await fetch('/api/process', {method: 'POST', body: fd});
+            
+            // THE FIX: If the server sends an error code, show the error message!
+            if (!res.ok) {
+                const errorData = await res.json();
+                msgBox.className = 'msg err';
+                msgBox.innerText = errorData.message;
+                btn.disabled = false; 
+                btn.innerText = 'Generate & Download';
+                return;
+            }
+
+            // If it succeeded, download the file
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; 
+            a.download = `Generated_${selectedTemplate}`;
+            document.body.appendChild(a); 
+            a.click(); 
+            a.remove();
+            URL.revokeObjectURL(url);
+            
+            msgBox.className = 'msg ok';
+            msgBox.innerText = 'Download started!';
+        } catch(e) {
+            msgBox.className = 'msg err';
+            msgBox.innerText = 'Network error!';
+        } finally {
+            btn.disabled = false; 
+            btn.innerText = 'Generate & Download';
+        }
+    }
+
+    function goHome() {
+        document.getElementById('home-view').style.display = 'block';
+        document.getElementById('form-view').style.display = 'none';
+    }
+
+    let uploadFormat = "";
+    function showUpload(format) { uploadFormat = format; document.getElementById('upload-modal').style.display = 'flex'; }
+    function closeUpload() { document.getElementById('upload-modal').style.display = 'none'; }
+
+async function uploadFile() {
+const file = document.getElementById('new-file').files[0];
+if(!file) return;
+const fd = new FormData(); fd.append('file', file);
+const res = await fetch('/api/upload_template', {method:'POST', body:fd});
+if(res.ok) { closeUpload(); loadTemplates(); }
+else { document.getElementById('msg-upload').className = 'msg err'; document.getElementById('msg-upload').innerText = 'Failed'; }
+}
+
+loadTemplates();
+</script>
+
+
+
+```
